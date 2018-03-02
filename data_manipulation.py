@@ -52,13 +52,13 @@ train         =  pd.read_csv(data_path + 'train.csv')
 
 ######################## Brief Document Exploration ###########################
 ###############################################################################
-# =============================================================================
-# dataframes = [event_type, log_feature, resource_type, severity_type, test, train]
-# for df in dataframes:
-#     #print(df.head())
-#     print(df.shape)
-# 
-# =============================================================================
+dataframes = [event_type, log_feature, resource_type, severity_type, test, train]
+for df in dataframes:
+    print(df.head())
+    #print(df.shape)
+    print(' ')
+    
+
 '''
     event_type (311170, 2)
     log_feature (58671, 3)
@@ -101,7 +101,7 @@ trainY          =  trainY.set_index('id')
 trainX         =  train.drop(['fault_severity'], axis=1)
 trainX         =  trainX.set_index('id')
 trainX_encoded =  pd.get_dummies(data=trainX)
-
+trainX_encoded = trainX_encoded.astype(np.float64)
 #test
 testX         =  test.set_index('id')
 testX_encoded =  pd.get_dummies(data=testX)
@@ -112,6 +112,7 @@ severitytype_encoded = pd.get_dummies(data=severity_type, columns = ['severity_t
 severitytype_encoded = severitytype_encoded.set_index('id')
 
 # log_feature
+#log_feature['volume'] = np.log(log_feature['volume'])
 log_feature           =  log_feature.set_index('id')
 logfeature_pivotted   =  log_feature.pivot(columns='log_feature', 
                          values='volume')
@@ -152,6 +153,34 @@ training_merge  =  reduce(lambda left, right: pd.merge(left, right, how='left',
 prediction_data =  reduce(lambda left, right: pd.merge(left, right, how='left', 
                    left_index=True, right_index=True), test_mergable_dataframes)
 
+training_merge = training_merge.astype(np.float64)
+prediction_data = prediction_data.astype(np.float64)
+
+#training_merge_col_headers = list(training_merge.columns.values)
+#prediction_data = prediction_data[training_merge_col_headers]
+
+'''
+    We have a problem here.. because the location variables are so sparse
+    The training_merge df contains levels of location that are not available in
+    the prediction_data and vice versa. In order to fix this we will...
+        1) remove any levels that prediction_data has that aren't in the 
+           training data
+        2) append all training_merge columns not in prediction_data to 
+            prediction_data.. All of these columns will be instantiated to
+            be zero
+'''
+#get lists of variables not in training_merge and prediction_data
+notInPred=[x for x in training_merge.columns.values if not x in prediction_data.columns.values]
+notInTrain=[x for x in prediction_data.columns.values if not x in  training_merge.columns.values]
+
+
+dropped_levels = prediction_data.drop(notInTrain, axis=1) #drop columns not in training
+notInPred_df = pd.DataFrame(np.zeros(shape=(len(prediction_data),len(notInPred))),
+                         columns = notInPred) #create all-zero df from notInPred
+notInPred_df.index = prediction_data.index.values
+prediction_data = pd.merge(dropped_levels, notInPred_df, how='inner', 
+                           left_index=True, right_index=True) 
+prediction_data = prediction_data[training_merge.columns.values]
 '''
     Lets confirm that observations from each dataset match
     We will do this by tracking a specific id and check that it matches the original data
@@ -185,6 +214,8 @@ prediction_data =  reduce(lambda left, right: pd.merge(left, right, how='left',
 
 X_train, X_test, y_train, y_test = train_test_split(training_merge, trainY, train_size=.8, random_state=314)
 
+training_merge.to_csv(data_path + 'training.csv')
+trainY.to_csv(data_path + 'training_labels.csv')
 X_train.to_csv(data_path + 'X_train.csv')
 X_test.to_csv(data_path + 'X_test.csv')
 y_train.to_csv(data_path + 'y_train.csv')
@@ -193,9 +224,6 @@ prediction_data.to_csv(data_path + 'prediction_data.csv')
 
 ###############################################################################
 ###############################################################################
-
-
-
 
 
 
